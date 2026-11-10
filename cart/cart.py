@@ -1,3 +1,6 @@
+from decimal import Decimal, ROUND_HALF_UP
+
+
 class Cart:
     """Shopping cart. Prices are strings like '19.99'.
 
@@ -9,23 +12,38 @@ class Cart:
 
     def __init__(self):
         self.items = {}
-        self.coupon = 0
+        self.coupon = Decimal("0")
 
     def add(self, sku, price, qty=1, buy2get1=False):
         if qty <= 0:
             raise ValueError("qty must be positive")
         if sku in self.items:
             self.items[sku]["qty"] += qty
+            # A later add for the same SKU must not lose the promotion.
+            self.items[sku]["buy2get1"] = (
+                self.items[sku]["buy2get1"] or buy2get1
+            )
         else:
-            self.items[sku] = {"price": float(price), "qty": qty, "buy2get1": buy2get1}
+            self.items[sku] = {
+                "price": Decimal(str(price)),
+                "qty": qty,
+                "buy2get1": buy2get1,
+            }
 
     def apply_coupon(self, percent):
+        percent = Decimal(str(percent))
+        if percent < 0 or percent > 100:
+            raise ValueError("coupon percent must be between 0 and 100")
         self.coupon = percent
 
     def total(self):
-        total = 0
+        subtotal = Decimal("0")
         for item in self.items.values():
-            line = item["price"] * item["qty"]
-            line = line * (1 - self.coupon / 100)
-            total += line
-        return round(total, 2)
+            qty = item["qty"]
+            if item["buy2get1"]:
+                qty -= qty // 3  # every 3rd unit free
+            subtotal += item["price"] * qty
+        discounted = subtotal * (
+            Decimal("1") - self.coupon / Decimal("100")
+        )
+        return discounted.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
